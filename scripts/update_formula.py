@@ -98,7 +98,10 @@ def api_endpoint_from_url(url: str) -> str | None:
 def fetch_json(url: str) -> dict:
     endpoint = api_endpoint_from_url(url)
     if endpoint and gh_available():
-        return json.loads(run_gh_api(endpoint).decode("utf-8"))
+        try:
+            return json.loads(run_gh_api(endpoint).decode("utf-8"))
+        except subprocess.CalledProcessError:
+            pass
 
     with urllib.request.urlopen(url) as response:
         return json.load(response)
@@ -107,7 +110,10 @@ def fetch_json(url: str) -> dict:
 def fetch_text(url: str, *, accept: str | None = None) -> str:
     endpoint = api_endpoint_from_url(url)
     if endpoint and gh_available():
-        return run_gh_api(endpoint, accept=accept).decode("utf-8")
+        try:
+            return run_gh_api(endpoint, accept=accept).decode("utf-8")
+        except subprocess.CalledProcessError:
+            pass
 
     request = urllib.request.Request(url)
     if accept:

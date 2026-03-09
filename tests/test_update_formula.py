@@ -1,6 +1,9 @@
 import importlib.util
+import io
+import json
 import pathlib
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "scripts" / "update_formula.py"
@@ -20,6 +23,30 @@ def load_update_module():
 
 
 class UpdateFormulaTests(unittest.TestCase):
+    def test_fetch_json_falls_back_to_urllib_when_gh_api_fails(self):
+        module = load_update_module()
+        payload = {"tag_name": "v6.8.49"}
+
+        with mock.patch.object(module, "gh_available", return_value=True), \
+             mock.patch.object(module, "run_gh_api", side_effect=module.subprocess.CalledProcessError(4, ["gh", "api"])), \
+             mock.patch.object(module.urllib.request, "urlopen", return_value=io.StringIO(json.dumps(payload))):
+            result = module.fetch_json(module.RELEASE_API_URL)
+
+        self.assertEqual(result, payload)
+
+    def test_fetch_text_falls_back_to_urllib_when_gh_api_fails(self):
+        module = load_update_module()
+
+        with mock.patch.object(module, "gh_available", return_value=True), \
+             mock.patch.object(module, "run_gh_api", side_effect=module.subprocess.CalledProcessError(4, ["gh", "api"])), \
+             mock.patch.object(module.urllib.request, "urlopen", return_value=io.BytesIO(b"checksum  file.tar.gz\n")):
+            result = module.fetch_text(
+                "https://api.github.com/repos/router-for-me/CLIProxyAPI/releases/assets/123",
+                accept="application/octet-stream",
+            )
+
+        self.assertEqual(result, "checksum  file.tar.gz\n")
+
     def test_parse_checksums_extracts_macos_hashes(self):
         module = load_update_module()
         checksums = """\
