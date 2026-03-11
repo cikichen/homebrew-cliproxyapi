@@ -25,7 +25,7 @@ brew upgrade cliproxyapi
 ## Verify
 
 ```bash
-cli-proxy-api --help
+cliproxyapi --help
 ```
 
 ## Automatic updates

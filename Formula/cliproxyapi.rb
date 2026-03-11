@@ -20,12 +20,12 @@ class Cliproxyapi < Formula
   end
 
   def install
-    bin.install "cli-proxy-api"
+    bin.install "cli-proxy-api" => "cliproxyapi"
     pkgshare.install "config.example.yaml" if File.exist?("config.example.yaml")
   end
 
   test do
-    output = shell_output("#{bin}/cli-proxy-api --help 2>&1")
+    output = shell_output("#{bin}/cliproxyapi --help 2>&1")
     assert_match "usage", output.downcase
   end
 end
