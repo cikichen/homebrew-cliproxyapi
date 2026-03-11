@@ -1,38 +1,61 @@
 class Cliproxyapi < Formula
-  desc "CLI API proxy service"
+  desc "Wrap Gemini CLI, Codex, Claude Code, Qwen Code as an API service"
   homepage "https://github.com/router-for-me/CLIProxyAPI"
-  version "6.8.51"
+  url "https://github.com/router-for-me/CLIProxyAPI/archive/refs/tags/v6.8.51.tar.gz"
+  sha256 "f3c8f3c6714f8d2bf394fab0c5208c64b8e62af2711a31ec0ba881dd8005d61a"
   license "MIT"
+  head "https://github.com/router-for-me/CLIProxyAPI.git", branch: "main"
 
-  livecheck do
-    url :stable
-    strategy :github_latest
-  end
 
-  on_macos do
-    if Hardware::CPU.arm?
-      url "https://github.com/router-for-me/CLIProxyAPI/releases/download/v#{version}/CLIProxyAPI_#{version}_darwin_arm64.tar.gz"
-      sha256 "5addb483e45996d0103622b779c9f4d8fe7eb06ece17e12c1753ce8aea7741b9"
-    else
-      url "https://github.com/router-for-me/CLIProxyAPI/releases/download/v#{version}/CLIProxyAPI_#{version}_darwin_amd64.tar.gz"
-      sha256 "f6e7a8abba4fda3709832980c083c149e8fa3e8398f7fd403a0009c1094b05b4"
-    end
-  end
+
+  depends_on "go" => :build
 
   def install
-    bin.install "cli-proxy-api" => "cliproxyapi"
-    pkgshare.install "config.example.yaml" if File.exist?("config.example.yaml")
-  end
+    ldflags = %W[
+      -s -w
+      -X main.Version=#{version}
+      -X main.Commit=#{tap.user}
+      -X main.BuildDate=#{time.iso8601}
+      -X main.DefaultConfigPath=#{etc/"cliproxyapi.conf"}
+    ]
 
-  test do
-    output = shell_output("#{bin}/cliproxyapi --help 2>&1")
-    assert_match "usage", output.downcase
+    system "go", "build", *std_go_args(ldflags:), "cmd/server/main.go"
+    etc.install "config.example.yaml" => "cliproxyapi.conf"
   end
 
   service do
-    run opt_bin/"cliproxyapi"
+    run [opt_bin/"cliproxyapi"]
     keep_alive true
-    log_path var/"log/cliproxyapi.log"
-    error_log_path var/"log/cliproxyapi.err.log"
+  end
+
+
+  test do
+    require "pty"
+    require "timeout"
+
+    output = +""
+    PTY.spawn(bin/"cliproxyapi", "-login", "-no-browser") do |r, _w, pid|
+      begin
+        Timeout.timeout(15) do
+          loop do
+            output << r.readpartial(1024)
+            break if output.include?("accounts.google.com")
+          end
+        end
+      ensure
+        begin
+          Process.kill "TERM", pid
+        rescue Errno::ESRCH
+          output << ""
+        end
+        begin
+          Process.wait pid
+        rescue Errno::ECHILD
+          output << ""
+        end
+      end
+    end
+
+    assert_match "accounts.google.com", output
   end
 end
