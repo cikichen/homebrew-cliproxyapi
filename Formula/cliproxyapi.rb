@@ -1,7 +1,7 @@
 class Cliproxyapi < Formula
   desc "CLI API proxy service"
   homepage "https://github.com/router-for-me/CLIProxyAPI"
-  version "6.8.50"
+  version "6.8.51"
   license "MIT"
 
   livecheck do
@@ -12,10 +12,10 @@ class Cliproxyapi < Formula
   on_macos do
     if Hardware::CPU.arm?
       url "https://github.com/router-for-me/CLIProxyAPI/releases/download/v#{version}/CLIProxyAPI_#{version}_darwin_arm64.tar.gz"
-      sha256 "ea546e28a9737bcdf233bff953837f32ad47ce26c19fe7576520e4dc1b4ed21d"
+      sha256 "5addb483e45996d0103622b779c9f4d8fe7eb06ece17e12c1753ce8aea7741b9"
     else
       url "https://github.com/router-for-me/CLIProxyAPI/releases/download/v#{version}/CLIProxyAPI_#{version}_darwin_amd64.tar.gz"
-      sha256 "367bb8a35edcad5fb13b19fd3416083dba6a2a6b300bfbfb7f5446e7949e52ab"
+      sha256 "f6e7a8abba4fda3709832980c083c149e8fa3e8398f7fd403a0009c1094b05b4"
     end
   end
 
