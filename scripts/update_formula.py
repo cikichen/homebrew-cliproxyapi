@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -8,71 +9,128 @@ import subprocess
 import sys
 import urllib.request
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Tuple
 
-RELEASE_API_URL = "https://api.github.com/repos/router-for-me/CLIProxyAPI/releases/latest"
+RELEASE_API_URL = (
+    "https://api.github.com/repos/router-for-me/CLIProxyAPI/releases/latest"
+)
+OFFICIAL_FORMULA_URL = "https://api.github.com/repos/Homebrew/homebrew-core/contents/Formula/c/cliproxyapi.rb?ref=HEAD"
 FORMULA_PATH = Path(__file__).resolve().parents[1] / "Formula" / "cliproxyapi.rb"
-ARM_FILENAME_TEMPLATE = "CLIProxyAPI_{version}_darwin_arm64.tar.gz"
-AMD_FILENAME_TEMPLATE = "CLIProxyAPI_{version}_darwin_amd64.tar.gz"
+
+TOP_LEVEL_BOTTLE_BLOCK_RE = re.compile(
+    r"\n  bottle do\n(?:    .*\n)+?  end\n",
+    flags=re.MULTILINE,
+)
+TOP_LEVEL_LIVECHECK_BLOCK_RE = re.compile(
+    r"\n  livecheck do\n(?:    .*\n)+?  end\n",
+    flags=re.MULTILINE,
+)
+TOP_LEVEL_URL_RE = re.compile(
+    r'^  url "https://github\.com/router-for-me/CLIProxyAPI/archive/refs/tags/v[^"]+\.tar\.gz"$',
+    flags=re.MULTILINE,
+)
+TOP_LEVEL_SHA256_RE = re.compile(
+    r'^  sha256 "[^"]+"$',
+    flags=re.MULTILINE,
+)
+TOP_LEVEL_TEST_BLOCK_RE = re.compile(
+    r"\n+  test do\n.*?\n  end\nend\s*\Z",
+    flags=re.DOTALL,
+)
+
+TEST_BLOCK = """
+  test do
+    require \"pty\"
+    require \"timeout\"
+
+    output = +\"\"
+    PTY.spawn(bin/\"cliproxyapi\", \"-login\", \"-no-browser\") do |r, _w, pid|
+      begin
+        Timeout.timeout(15) do
+          loop do
+            output << r.readpartial(1024)
+            break if output.include?(\"accounts.google.com\")
+          end
+        end
+      ensure
+        begin
+          Process.kill \"TERM\", pid
+        rescue Errno::ESRCH
+          output << \"\"
+        end
+        begin
+          Process.wait pid
+        rescue Errno::ECHILD
+          output << \"\"
+        end
+      end
+    end
+
+    assert_match \"accounts.google.com\", output
+  end
+end"""
 
 
-def parse_checksums(checksums_text: str, version: str) -> Dict[str, str]:
-    expected_files = {
-        ARM_FILENAME_TEMPLATE.format(version=version): "darwin_arm64",
-        AMD_FILENAME_TEMPLATE.format(version=version): "darwin_amd64",
-    }
-    result: Dict[str, str] = {}
+def update_formula_text(
+    formula_text: str, version: str, source_sha256: str
+) -> Tuple[str, bool]:
+    updated_text = TOP_LEVEL_LIVECHECK_BLOCK_RE.sub("\n", formula_text, count=1)
+    updated_text = TOP_LEVEL_BOTTLE_BLOCK_RE.sub("\n", updated_text, count=1)
 
-    for line in checksums_text.splitlines():
-        parts = line.split()
-        if len(parts) != 2:
-            continue
-        checksum, filename = parts
-        arch_key = expected_files.get(filename)
-        if arch_key:
-            result[arch_key] = checksum
-
-    missing = sorted(set(expected_files.values()) - set(result))
-    if missing:
-        raise ValueError(f"Missing checksums for: {', '.join(missing)}")
-
-    return result
-
-
-def update_formula_text(formula_text: str, version: str, macos_checksums: Dict[str, str]) -> Tuple[str, bool]:
-    updated_text = re.sub(r'version ".*?"', f'version "{version}"', formula_text, count=1)
-
-    sha_pattern = re.compile(
-        r'(?P<indent>\s+)if Hardware::CPU\.arm\?\n(?P<arm_block>(?:.*\n)*?)(?P=indent)else\n(?P<amd_block>(?:.*\n)*?)(?P=indent)end',
-        re.MULTILINE,
-    )
-    match = sha_pattern.search(updated_text)
-    if not match:
-        raise ValueError("Unable to locate macOS checksum block in formula")
-
-    arm_block = re.sub(
-        r'sha256 ".*?"',
-        f'sha256 "{macos_checksums["darwin_arm64"]}"',
-        match.group("arm_block"),
+    updated_text, url_count = TOP_LEVEL_URL_RE.subn(
+        f'  url "https://github.com/router-for-me/CLIProxyAPI/archive/refs/tags/v{version}.tar.gz"',
+        updated_text,
         count=1,
     )
-    amd_block = re.sub(
-        r'sha256 ".*?"',
-        f'sha256 "{macos_checksums["darwin_amd64"]}"',
-        match.group("amd_block"),
+    if url_count != 1:
+        raise ValueError("Official formula top-level url not found")
+
+    updated_text, sha_count = TOP_LEVEL_SHA256_RE.subn(
+        f'  sha256 "{source_sha256}"',
+        updated_text,
         count=1,
     )
+    if sha_count != 1:
+        raise ValueError("Official formula top-level sha256 not found")
 
-    replacement = (
-        f'{match.group("indent")}if Hardware::CPU.arm?\n'
-        f'{arm_block}'
-        f'{match.group("indent")}else\n'
-        f'{amd_block}'
-        f'{match.group("indent")}end'
+    updated_text, test_count = TOP_LEVEL_TEST_BLOCK_RE.subn(
+        "\n\n" + TEST_BLOCK + "\n",
+        updated_text,
+        count=1,
     )
-    updated_text = f'{updated_text[:match.start()]}{replacement}{updated_text[match.end():]}'
+    if test_count != 1:
+        raise ValueError("Official formula test block not found")
+
+    validate_formula_text(updated_text, version=version)
 
     return updated_text, updated_text != formula_text
+
+
+def validate_formula_text(formula_text: str, *, version: str) -> None:
+    required_snippets = [
+        "class Cliproxyapi < Formula",
+        'homepage "https://github.com/router-for-me/CLIProxyAPI"',
+        f'url "https://github.com/router-for-me/CLIProxyAPI/archive/refs/tags/v{version}.tar.gz"',
+        'depends_on "go" => :build',
+        'system "go", "build"',
+        'etc.install "config.example.yaml" => "cliproxyapi.conf"',
+        "service do",
+        'run [opt_bin/"cliproxyapi"]',
+        "test do",
+        'PTY.spawn(bin/"cliproxyapi", "-login", "-no-browser")',
+        "Timeout.timeout(15)",
+        'assert_match "accounts.google.com", output',
+    ]
+
+    missing = [snippet for snippet in required_snippets if snippet not in formula_text]
+    if missing:
+        raise ValueError(f"Generated formula missing required content: {missing}")
+
+    if "bottle do" in formula_text:
+        raise ValueError("Generated formula still contains bottle block")
+
+    if "livecheck do" in formula_text:
+        raise ValueError("Generated formula still contains livecheck block")
 
 
 def gh_available() -> bool:
@@ -91,7 +149,7 @@ def run_gh_api(endpoint: str, *, accept: str | None = None) -> bytes:
 def api_endpoint_from_url(url: str) -> str | None:
     prefix = "https://api.github.com/"
     if url.startswith(prefix):
-        return url[len(prefix):]
+        return url[len(prefix) :]
     return None
 
 
@@ -123,24 +181,35 @@ def fetch_text(url: str, *, accept: str | None = None) -> str:
         return response.read().decode("utf-8")
 
 
+def fetch_bytes(url: str) -> bytes:
+    result = subprocess.run(
+        ["curl", "-fsSL", "--retry", "3", "--retry-delay", "1", url],
+        check=True,
+        capture_output=True,
+    )
+    return result.stdout
+
+
 def update_formula_file(formula_path: Path = FORMULA_PATH) -> bool:
     release = fetch_json(RELEASE_API_URL)
+    if release.get("draft") or release.get("prerelease"):
+        raise ValueError("Latest release must be a published stable release")
+
     tag_name = release["tag_name"]
     version = tag_name.removeprefix("v")
 
-    checksums_asset = next(
-        (asset for asset in release.get("assets", []) if asset.get("name") == "checksums.txt"),
-        None,
+    official_formula = fetch_text(
+        OFFICIAL_FORMULA_URL,
+        accept="application/vnd.github.raw",
     )
-    if checksums_asset is None:
-        raise ValueError("checksums.txt asset not found in latest release")
 
-    checksums = parse_checksums(
-        fetch_text(checksums_asset["url"], accept="application/octet-stream"),
-        version,
+    source_tarball_url = f"https://github.com/router-for-me/CLIProxyAPI/archive/refs/tags/v{version}.tar.gz"
+    source_tarball_bytes = fetch_bytes(source_tarball_url)
+    source_sha256 = hashlib.sha256(source_tarball_bytes).hexdigest()
+
+    updated_text, changed = update_formula_text(
+        official_formula, version, source_sha256
     )
-    original_text = formula_path.read_text()
-    updated_text, changed = update_formula_text(original_text, version, checksums)
 
     if changed:
         formula_path.write_text(updated_text)

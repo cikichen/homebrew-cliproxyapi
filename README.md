@@ -40,10 +40,12 @@ It can update the formula in two ways:
 The workflow:
 
 1. runs the unit tests for the update script
-2. fetches the latest upstream CLIProxyAPI release metadata
-3. fetches upstream `checksums.txt`
-4. updates `Formula/cliproxyapi.rb` when version or checksums changed
+2. fetches the official homebrew-core formula as a template
+3. fetches the latest upstream CLIProxyAPI release metadata
+4. updates `Formula/cliproxyapi.rb` with the latest version and source tarball sha256
 5. commits and pushes the formula update automatically
+
+This tap reuses the official homebrew-core formula structure and only syncs version-related changes for faster releases.
 
 ## Manual local update
 
@@ -54,18 +56,3 @@ python3 scripts/update_formula.py
 ```
 
 If the formula is already on the latest release, the script exits without changing the file.
-
-## Update formula manually
-
-When upstream publishes a new release and you want to update by hand:
-
-1. Update `version` in `Formula/cliproxyapi.rb`
-2. Update the matching `sha256` values from upstream `checksums.txt`
-3. Commit and push
-
-## Upstream release assets
-
-This tap uses the upstream GitHub release archives:
-
-- `CLIProxyAPI_<version>_darwin_arm64.tar.gz`
-- `CLIProxyAPI_<version>_darwin_amd64.tar.gz`
