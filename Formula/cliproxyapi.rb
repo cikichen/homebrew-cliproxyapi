@@ -28,4 +28,11 @@ class Cliproxyapi < Formula
     output = shell_output("#{bin}/cliproxyapi --help 2>&1")
     assert_match "usage", output.downcase
   end
+
+  service do
+    run opt_bin/"cliproxyapi"
+    keep_alive true
+    log_path var/"log/cliproxyapi.log"
+    error_log_path var/"log/cliproxyapi.err.log"
+  end
 end
