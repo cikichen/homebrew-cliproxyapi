@@ -1,8 +1,8 @@
 class Cliproxyapi < Formula
   desc "Wrap Gemini CLI, Codex, Claude Code, Qwen Code as an API service"
   homepage "https://github.com/router-for-me/CLIProxyAPI"
-  url "https://github.com/router-for-me/CLIProxyAPI/archive/refs/tags/v7.2.102.tar.gz"
-  sha256 "ab6f60fe7e5e2c26bfc11114b27ed5ac33a6f83a26fde8bf4ccafc6f0497dd91"
+  url "https://github.com/router-for-me/CLIProxyAPI/archive/refs/tags/v7.2.103.tar.gz"
+  sha256 "df22956c8ce15d76895481f5e8ffc98d893245f57d2e2cc447bc11f74829e3dd"
   license "MIT"
   head "https://github.com/router-for-me/CLIProxyAPI.git", branch: "main"
 
@@ -12,7 +12,6 @@ class Cliproxyapi < Formula
 
   def install
     ldflags = %W[
-      -s -w
       -X main.Version=#{version}
       -X main.Commit=#{tap.user}
       -X main.BuildDate=#{time.iso8601}
