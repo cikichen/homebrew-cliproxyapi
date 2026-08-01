@@ -1,8 +1,8 @@
 class Cliproxyapi < Formula
   desc "Wrap Gemini CLI, Codex, Claude Code, Qwen Code as an API service"
   homepage "https://github.com/router-for-me/CLIProxyAPI"
-  url "https://github.com/router-for-me/CLIProxyAPI/archive/refs/tags/v7.2.111.tar.gz"
-  sha256 "803b7b3a805020e1cb029c976a9b3c4162f2b46b430d773c78b4afdb0ac4bd8f"
+  url "https://github.com/router-for-me/CLIProxyAPI/archive/refs/tags/v7.2.112.tar.gz"
+  sha256 "a961a1ec8f35542913f39ad1941c44c25b40446a52ebfb9a76655c2e9968bd60"
   license "MIT"
   head "https://github.com/router-for-me/CLIProxyAPI.git", branch: "main"
 
