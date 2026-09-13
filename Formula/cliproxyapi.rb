@@ -1,14 +1,21 @@
 class Cliproxyapi < Formula
   desc "Wrap Gemini CLI, Codex, Claude Code, Qwen Code as an API service"
   homepage "https://github.com/router-for-me/CLIProxyAPI"
-  url "https://github.com/router-for-me/CLIProxyAPI/archive/refs/tags/v7.2.158.tar.gz"
-  sha256 "c52c72af86f1fd54dd01dcdfd64e7610ad7b8ff8b9918d848679e2149be2b4e5"
+  url "https://github.com/router-for-me/CLIProxyAPI/archive/refs/tags/v7.2.159.tar.gz"
+  sha256 "3a565bc1e7d449da6b13de0ea22bbf8915432257866c870d7ec54eed8faa9ffd"
   license "MIT"
   head "https://github.com/router-for-me/CLIProxyAPI.git", branch: "main"
 
 
 
   depends_on "go" => :build
+
+  # `test do` block needs local sockets for the login flow
+  deny_network_access! [:build, :postinstall]
+
+  def fetch
+    system "go", "mod", "download"
+  end
 
   def install
     ldflags = %W[
